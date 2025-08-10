@@ -5,6 +5,7 @@ import os
 import re
 import ssl
 import certifi
+import logging
 from slack_sdk import WebClient
 from slack_sdk.signature import SignatureVerifier
 
@@ -21,9 +22,9 @@ ssl_context = None
 try:
     # Try to use system certificates first
     slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
-    print("✅ Using default SSL configuration", flush=True)
+    app.logger.info("✅ Using default SSL configuration")
 except Exception as e:
-    print(f"⚠️  Default SSL failed, trying custom SSL context: {e}", flush=True)
+    app.logger.warning(f"⚠️  Default SSL failed, trying custom SSL context: {e}")
     # Fallback to custom SSL context
     ssl_context = ssl.create_default_context(cafile=certifi.where())
     ssl_context.verify_mode = ssl.CERT_REQUIRED
@@ -33,7 +34,7 @@ except Exception as e:
         token=os.getenv("SLACK_BOT_TOKEN"),
         ssl=ssl_context
     )
-    print("✅ Using custom SSL context", flush=True)
+    app.logger.info("✅ Using custom SSL context")
 
 # Initialize Slack signature verifier
 slack_sig_verifier = SignatureVerifier(os.getenv("SLACK_SIGNING_SECRET"))
@@ -41,29 +42,29 @@ slack_sig_verifier = SignatureVerifier(os.getenv("SLACK_SIGNING_SECRET"))
 @app.route('/incoming/twilio', methods=['POST'])
 def send_incoming_sms():
     try:
-        print("📱 Received SMS webhook from Twilio", flush=True)
-        print(f"📋 Request form data: {dict(request.form)}", flush=True)
+        app.logger.info("📱 Received SMS webhook from Twilio")
+        app.logger.info(f"📋 Request form data: {dict(request.form)}")
         
         from_number = request.form.get('From')
         sms_message = request.form.get('Body')
         
-        print(f"📞 From: {from_number}", flush=True)
-        print(f"💬 Message: {sms_message}", flush=True)
+        app.logger.info(f"📞 From: {from_number}")
+        app.logger.info(f"💬 Message: {sms_message}")
         
         message = f"Text message from {from_number}: {sms_message}"
         
         # Try to post to Slack
         try:
-            print(f"🔐 Attempting to post to Slack channel 'texts'", flush=True)
-            print(f"🔑 Slack token: {os.getenv('SLACK_BOT_TOKEN')[:10]}...", flush=True)
+            app.logger.info(f"🔐 Attempting to post to Slack channel 'texts'")
+            app.logger.info(f"🔑 Slack token: {os.getenv('SLACK_BOT_TOKEN')[:10]}...")
             
             slack_message = slack_client.chat_postMessage(
                 channel='texts', text=message)
-            print(f"✅ Successfully posted to Slack: {message}", flush=True)
-            print(f"📝 Slack response: {slack_message}", flush=True)
+            app.logger.info(f"✅ Successfully posted to Slack: {message}")
+            app.logger.info(f"📝 Slack response: {slack_message}")
         except Exception as e:
-            print(f"❌ Failed to post to Slack: {e}", flush=True)
-            print(f"🔍 Error type: {type(e).__name__}", flush=True)
+            app.logger.error(f"❌ Failed to post to Slack: {e}")
+            app.logger.error(f"🔍 Error type: {type(e).__name__}")
             # Still return success to Twilio to avoid retries
         
         response = MessagingResponse()
@@ -76,42 +77,42 @@ def send_incoming_sms():
 @app.route('/incoming/slack', methods=['POST'])
 def send_incoming_slack():
     try:
-        print("💬 Received Slack webhook", flush=True)
-        print(f"📋 Request headers: {dict(request.headers)}", flush=True)
+        app.logger.info("💬 Received Slack webhook")
+        app.logger.info(f"📋 Request headers: {dict(request.headers)}")
         
         attributes = request.get_json()
-        print(f"📝 Request body: {attributes}", flush=True)
+        app.logger.info(f"📝 Request body: {attributes}")
         
         if 'challenge' in attributes:
-            print(f"🔐 Slack challenge received: {attributes['challenge']}", flush=True)
+            app.logger.info(f"🔐 Slack challenge received: {attributes['challenge']}")
             return Response(attributes['challenge'], mimetype="text/plain")
         
         incoming_slack_message_id, slack_message, channel = parse_message(attributes)
-        print(f"🔍 Parsed: message_id={incoming_slack_message_id}, message={slack_message}, channel={channel}", flush=True)
+        app.logger.info(f"🔍 Parsed: message_id={incoming_slack_message_id}, message={slack_message}, channel={channel}")
         
         if incoming_slack_message_id and slack_message:
             to_number = get_to_number(incoming_slack_message_id, channel)
-            print(f"📱 Phone number to send to: {to_number}", flush=True)
+            app.logger.info(f"📱 Phone number to send to: {to_number}")
             
             if to_number:
                 try:
-                    print(f"📤 Sending SMS via Twilio to {to_number}", flush=True)
+                    app.logger.info(f"📤 Sending SMS via Twilio to {to_number}")
                     messages = twilio_client.messages.create(
                         to=to_number, from_=os.getenv("TWILIO_NUMBER"), body=slack_message)
-                    print(f"✅ Successfully sent SMS to {to_number}: {slack_message}", flush=True)
-                    print(f"📝 Twilio response: {messages}", flush=True)
+                    app.logger.info(f"✅ Successfully sent SMS to {to_number}: {slack_message}")
+                    app.logger.info(f"📝 Twilio response: {messages}")
                 except Exception as e:
-                    print(f"❌ Failed to send SMS: {e}", flush=True)
-                    print(f"🔍 Error type: {type(e).__name__}", flush=True)
+                    app.logger.error(f"❌ Failed to send SMS: {e}")
+                    app.logger.error(f"🔍 Error type: {type(e).__name__}")
             else:
-                print("⚠️  No phone number found to send SMS to", flush=True)
+                app.logger.warning("⚠️  No phone number found to send SMS to")
             return Response()
         else:
-            print("⚠️  No valid message data found", flush=True)
+            app.logger.warning("⚠️  No valid message data found")
         return Response()
     except Exception as e:
-        print(f"❌ Error in Slack endpoint: {e}", flush=True)
-        print(f"🔍 Error type: {type(e).__name__}", flush=True)
+        app.logger.error(f"❌ Error in Slack endpoint: {e}")
+        app.logger.error(f"🔍 Error type: {type(e).__name__}")
         return Response()
 
 def parse_message(attributes):
