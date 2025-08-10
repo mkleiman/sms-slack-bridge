@@ -122,7 +122,8 @@ def parse_message(attributes):
 
 def get_to_number(incoming_slack_message_id, channel):
     data = slack_client.conversations_history(channel=channel, latest=incoming_slack_message_id, limit=1, inclusive=1)
-    if 'subtype' in data['messages'][0] and data['messages'][0]['subtype'] == 'bot_message':
+    app.logger.info(f"Data are {data}")
+    if 'bot_id' in data['messages'][0] and data['messages'][0]['bot_id'] == 'B099R0JDTR8':
         text = data['messages'][0]['text']
         phone_number = extract_phone_number(text)
         return phone_number
