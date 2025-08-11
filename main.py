@@ -6,6 +6,10 @@ import re
 import ssl
 import certifi
 import logging
+import schedule
+import time
+import threading
+import requests
 from slack_sdk import WebClient
 from slack_sdk.signature import SignatureVerifier
 
@@ -38,6 +42,30 @@ except Exception as e:
 
 # Initialize Slack signature verifier
 slack_sig_verifier = SignatureVerifier(os.getenv("SLACK_SIGNING_SECRET"))
+
+def ping_url():
+    """Ping the specified URL to keep the service alive"""
+    try:
+        url = "https://sms-slack-bridge.onrender.com/incoming/slack"
+        response = requests.get(url, timeout=10)
+        app.logger.info(f"🔄 Cron job: Pinged {url} - Status: {response.status_code}")
+    except Exception as e:
+        app.logger.error(f"❌ Cron job: Failed to ping {url}: {e}")
+
+def run_scheduler():
+    """Run the scheduler in a separate thread"""
+    while True:
+        schedule.run_pending()
+        time.sleep(60)  # Check every minute
+
+# Schedule the ping job to run every 14 minutes
+schedule.every(14).minutes.do(ping_url)
+
+# Start the scheduler in a background thread
+scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+scheduler_thread.start()
+
+app.logger.info("✅ Cron job scheduler started - will ping every 14 minutes")
 
 @app.route('/incoming/twilio', methods=['POST'])
 def send_incoming_sms():

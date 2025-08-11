@@ -2,3 +2,5 @@ Flask==2.3.3
 twilio==8.10.0
 slack-sdk==3.26.1
 python-dotenv==1.0.0
+schedule==1.2.0
+requests==2.31.0
